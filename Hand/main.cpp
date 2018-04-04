@@ -268,6 +268,8 @@ void main(int argc, char** argv){
 	projection.compute_current_orientation(model);
 	projection.project_3d_to_2d(model);
 
+
+	//用于opengl显示
 	_data.init(model->vertices_.rows(),model->faces_.rows());
 	_data.set(model->vertices_update_,model->faces_);
 	_data.set_color(model->weight_);
@@ -310,6 +312,8 @@ void main(int argc, char** argv){
 	//}
 
 
+
+  //glut简单教程，以下的函数都有提到：http://www.cnblogs.com/yangxi/archive/2011/09/16/2178479.html
   glutInit(&argc, argv);
  
   glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
@@ -324,7 +328,7 @@ void main(int argc, char** argv){
   glutSpecialUpFunc(keyboardSpecialUp);
   glutMouseFunc(mouseClick);
   glutMotionFunc(mouseMotion);
-  glutReshapeFunc(reshape);
+  glutReshapeFunc(reshape);  //当使用鼠标改变opengl显示窗口时，被调用的函数，保证不变形
   glutDisplayFunc(draw);  
   glutIdleFunc(idle);
   glutIgnoreKeyRepeat(true); // ignore keys held down
