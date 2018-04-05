@@ -43,3 +43,12 @@ Temporary Items
 .apdisk
 *.png
 *.tlog
+.vs/Hand/v14/.suo
+Hand.VC.db
+*.obj
+*.obj
+Hand/Release/BVH.obj
+Hand/Release/Config.obj
+Release/Hand.iobj
+Hand.VC.db
+*.obj

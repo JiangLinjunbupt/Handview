@@ -17,13 +17,19 @@ msra msr;
 
 #include "Projection.h"
 
+float Compute_area(cv::Mat input);
+float Compute_targetFunction(float area1, cv::Mat input);
+void MixShowResult(cv::Mat input1, cv::Mat input2);
+cv::Mat generate_depthMap(Pose* pose, float scale, Model* model, Projection *projection);
 
 Config config;
 VisData _data;
 Control control;
 Sample sample(30.0);
-Projection projection(240,320,23,28);
+Projection *projection = new Projection(240, 320, 23, 28);
 
+const float h = 0.001;
+const float step_length = 0.5;
 
 #pragma region  Keybroad_event(show mesh or not)
 
@@ -216,12 +222,12 @@ void idle() {
 	//}
 	Pose pose;
 	pose.x = 0; pose.y = 0; pose.z = -200;
-	//sample.select_one_for_global(model,pose);
+
 	sample.select_one(model);           //用于随机选择一个关节点，进行该关节点变换范围内的随机变换，并且后续进行生成图像等一系列操作
 	model->forward_kinematic();
 	model->compute_mesh();
-	projection.compute_current_orientation(model);
-	projection.project_3d_to_2d(model);
+	projection->compute_current_orientation(model);
+	projection->project_3d_to_2d(model);
 	_data.set_vertices(model->vertices_update_);
 	_data.set_skeleton(model);
 	glutPostRedisplay();
@@ -248,25 +254,45 @@ void main(int argc, char** argv){
 	Pose pose(0,0,0);
 	pose.x = 0; pose.y = -0; pose.z = -20;
 	model->set_one_rotation(pose,21);  
-	pose.x = 0; pose.y = 0; pose.z = -90;
 	model->load_faces(".\\model\\handfaces.txt");
 	model->load_vertices(".\\model\\handverts.txt");
 	model->load_weight(".\\model\\weight.txt");
 
 	Configuration* pconfig = Global();
 	pconfig->LoadConfiguration("configuration.txt");
-	//model->set_one_rotation(pose,3);
 	 
-	pose.x = 0; pose.y = 0; pose.z = -200;
+	pose.x = 0; pose.y = 0; pose.z = -800;   //这里z负方向上越大，手看起来越小
 	model->set_global_position(pose);
 	model->set_global_position_center(pose);
-	model->save_upper_lower_of_angle("parameters_range.txt");
-	model->forward_kinematic();
-	model->compute_mesh();
 
-	projection.set_color_index(model);
-	projection.compute_current_orientation(model);
-	projection.project_3d_to_2d(model);
+	model->Random_given_poseAndscale(model);
+	
+	model->Save_given_params("groundtruth.txt");
+
+	
+	cv::Mat grounthmat1 = generate_depthMap(model->given_pose, model->given_scale, model, projection);
+
+	cv::imwrite("groundtruth1.png", grounthmat1);
+
+
+	model->Random_given_poseAndscale(model);
+
+	model->Save_given_params("groundtruth2.txt");
+
+
+	cv::Mat grounthmat2 = generate_depthMap(model->given_pose, model->given_scale, model, projection);
+
+	cv::imwrite("groundtruth2.png", grounthmat2);
+
+
+	MixShowResult(grounthmat1, grounthmat2);
+
+	//model->forward_kinematic();
+	//model->compute_mesh();
+
+	//projection->set_color_index(model);
+	//projection->compute_current_orientation(model);
+	//projection->project_3d_to_2d(model);
 
 
 	//用于opengl显示
@@ -330,7 +356,7 @@ void main(int argc, char** argv){
   glutMotionFunc(mouseMotion);
   glutReshapeFunc(reshape);  //当使用鼠标改变opengl显示窗口时，被调用的函数，保证不变形
   glutDisplayFunc(draw);  
-  glutIdleFunc(idle);
+  //glutIdleFunc(idle);
   glutIgnoreKeyRepeat(true); // ignore keys held down
  
   // create a sub menu 
@@ -355,4 +381,92 @@ void main(int argc, char** argv){
 	//model->save_trans("trans.txt");
 	//model->save_local("local.txt");
 	//model->save_global("global.txt");
+}
+
+
+float Compute_area(cv::Mat input)
+{
+	int HandPixelCount = 0;
+	for (int i = 0; i < input.rows; i++) {
+		for (int j = 0; j < input.cols; j++) {
+			if (input.at<ushort>(i, j) != 0)
+				HandPixelCount++;
+		}
+	}
+
+	return HandPixelCount / (input.cols*input.rows);
+}
+
+float Compute_targetFunction(float area1, cv::Mat input)
+{
+	float area2 = Compute_area(input);
+	return pow((area1 - area2), 2);
+}
+
+void MixShowResult(cv::Mat input1, cv::Mat input2)
+{
+	int height = input1.rows;
+	int width = input1.cols;
+	cv::Mat colored_input1 = cv::Mat::zeros(height, width, CV_8UC3);
+	cv::Mat colored_input2 = cv::Mat::zeros(height, width, CV_8UC3);
+	cv::Mat dst;
+	for (int i = 0; i < height; i++)
+	{
+		for (int j = 0; j < width; j++)
+		{
+			if (input1.at<ushort>(i, j) != 0)
+			{
+				colored_input1.at < cv::Vec3b>(i, j)[0] = 0;
+				colored_input1.at < cv::Vec3b>(i, j)[1] = 0;
+				colored_input1.at < cv::Vec3b>(i, j)[2] = 255;
+			}
+			else
+			{
+
+				colored_input1.at < cv::Vec3b>(i, j)[0] = 255;
+				colored_input1.at < cv::Vec3b>(i, j)[1] = 255;
+				colored_input1.at < cv::Vec3b>(i, j)[2] = 255;
+
+			}
+
+			if (input2.at<ushort>(i, j) != 0)
+			{
+				colored_input2.at < cv::Vec3b>(i, j)[0] = 0;
+				colored_input2.at < cv::Vec3b>(i, j)[1] = 255;
+				colored_input2.at < cv::Vec3b>(i, j)[2] = 0;
+			}
+			else
+			{
+
+				colored_input2.at < cv::Vec3b>(i, j)[0] = 255;
+				colored_input2.at < cv::Vec3b>(i, j)[1] = 255;
+				colored_input2.at < cv::Vec3b>(i, j)[2] = 255;
+
+			}
+
+		}
+	}
+
+	cv::addWeighted(colored_input1, 0.5, colored_input2, 0.5, 0.0, dst);
+	cv::imshow("Mixed Result", dst);
+
+}
+
+cv::Mat generate_depthMap(Pose* pose, float scale, Model* model, Projection *projection)
+{
+	cv::Mat generated_mat = cv::Mat::zeros(240, 320, CV_16UC1);;
+	for (int i = 1; i < 23; i++)
+	{
+		model->set_one_rotation(pose[i], i);
+		model->set_joint_scale(scale, i);
+		
+	}
+
+	model->forward_kinematic();
+	model->compute_mesh();
+
+	projection->set_color_index(model);
+	projection->compute_current_orientation(model);
+	projection->project_3d_to_2d_(model,generated_mat);
+	return generated_mat;
 }

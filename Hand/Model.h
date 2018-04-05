@@ -3,7 +3,6 @@
 #include "BVH.h"
 #include "Model.h"
 #include "HandStruct.h"
-
 // the hand model is designed according to the mathematic formulation
 // from Microsoft Research paper
 
@@ -32,6 +31,7 @@ public:
 	void set_rotation(Pose* pose);
 	void set_global_position(Pose global_position);
 	void set_global_position_center(Pose global_position);
+	void set_joint_scale(float scale,int index);
 
 	void transform_matrix(Pose pose, Eigen::MatrixXd& rot);
 	void compute_global();
@@ -72,6 +72,11 @@ public:
 	Eigen::MatrixXd weight_;
 	Eigen::MatrixXd vertices_update_;
 
+	Pose given_pose[23];
+	float given_scale;
+	void Random_given_poseAndscale(Model* model);
+	void Save_given_params(char* filename);
+	void Load_groundtruth_pose(char* filename, Model* model);
 
 private:
 	BVH bvh_;
@@ -79,9 +84,6 @@ private:
 	Pose global_position_center_;
 	int corresponds_[3];
 	int number_visiable_;
-
-
-
 	int num_faces_;
 	
 	//Eigen::MatrixXd vertices0_; // vertices0 is 
