@@ -27,9 +27,9 @@ VisData _data;
 Control control;
 Sample sample(30.0);
 Projection *projection = new Projection(240, 320, 23, 28);
-
-const float h = 0.001;
-const float step_length = 0.5;
+cv::Mat groundtruthmat;
+const float h = 0.05;
+const float step_length = 1;
 
 #pragma region  Keybroad_event(show mesh or not)
 
@@ -223,7 +223,7 @@ void idle() {
 	Pose pose;
 	pose.x = 0; pose.y = 0; pose.z = -200;
 
-	sample.select_one(model);           //用于随机选择一个关节点，进行该关节点变换范围内的随机变换，并且后续进行生成图像等一系列操作
+	//sample.select_one(model);           //用于随机选择一个关节点，进行该关节点变换范围内的随机变换，并且后续进行生成图像等一系列操作
 	model->forward_kinematic();
 	model->compute_mesh();
 	projection->compute_current_orientation(model);
@@ -261,31 +261,95 @@ void main(int argc, char** argv){
 	Configuration* pconfig = Global();
 	pconfig->LoadConfiguration("configuration.txt");
 	 
-	pose.x = 0; pose.y = 0; pose.z = -800;   //这里z负方向上越大，手看起来越小
+	pose.x = 0; pose.y = 0; pose.z = -800;   //这里z负方向上越大，深度图中的手看起来越小
 	model->set_global_position(pose);
 	model->set_global_position_center(pose);
 
-	model->Random_given_poseAndscale(model);
-	
-	model->Save_given_params("groundtruth.txt");
 
-	
-	cv::Mat grounthmat1 = generate_depthMap(model->given_pose, model->given_scale, model, projection);
+	model->Load_groundtruth_pose("groundtruth.txt", model);
+	groundtruthmat = generate_depthMap(model->given_pose, model->given_scale, model, projection);
+	float groundarea = Compute_area(groundtruthmat);
 
-	cv::imwrite("groundtruth1.png", grounthmat1);
+	srand(time(NULL));
+	model->given_scale = float(5 * rand() / float(RAND_MAX + 1));
+
+	float difference = 0;
+	do
+	{
+		float gradient = 0;
+		for (int i = 0; i < 23; i++)
+		{
+			model->set_joint_scale(model->given_scale + h, i);
+		}
+
+		cv::Mat generatedmat1 = generate_depthMap(model->given_pose, model->given_scale, model, projection);
 
 
-	model->Random_given_poseAndscale(model);
-
-	model->Save_given_params("groundtruth2.txt");
+		float gradient1 = Compute_targetFunction(groundarea, generatedmat1);
 
 
-	cv::Mat grounthmat2 = generate_depthMap(model->given_pose, model->given_scale, model, projection);
+		for (int i = 0; i < 23; i++)
+		{
+			if (model->given_scale > h)
+			{
+				model->set_joint_scale(model->given_scale - h, i);
+			}
+			else
+			{
+				model->set_joint_scale(model->given_scale, i);
+			}
+		}
 
-	cv::imwrite("groundtruth2.png", grounthmat2);
+		cv::Mat generatedmat2 = generate_depthMap(model->given_pose, model->given_scale, model, projection);
+
+		float gradient2 = Compute_targetFunction(groundarea, generatedmat2);
+		gradient = gradient1- gradient2;
+		cout << gradient1 << "  ";
+		gradient = gradient / (2 * h);
+		cout << gradient2 << "  " << gradient << "  ";
+		if (gradient != 0)
+		{
+			//gradient = gradient / abs(gradient);
+			model->given_scale = model->given_scale - step_length*gradient;
 
 
-	MixShowResult(grounthmat1, grounthmat2);
+			for (int i = 0; i < 23; i++)
+			{
+				model->set_joint_scale(model->given_scale, i);
+			}
+
+			cv::Mat generatedmat = generate_depthMap(model->given_pose, model->given_scale, model, projection);
+
+			difference = Compute_targetFunction(groundarea, generatedmat);
+			cout << difference << "  " << model->given_scale << endl;
+			MixShowResult(groundtruthmat, generatedmat);
+			cv::waitKey(50);
+		}
+		else
+		{
+			cout << "gradient is 0"<<"  ";
+			cv::Mat generatedmat = generate_depthMap(model->given_pose, model->given_scale, model, projection);
+
+			difference = Compute_targetFunction(groundarea, generatedmat);
+			cout << difference << "  " << model->given_scale << endl;
+			MixShowResult(groundtruthmat, generatedmat);
+			cv::waitKey(50);
+		}
+		
+	} while (difference >0.001);
+
+	//model->Random_given_poseAndscale(model);
+	//
+	//model->Save_given_params("groundtruth.txt");
+
+	//
+	//cv::Mat grounthmat = generate_depthMap(model->given_pose, model->given_scale, model, projection);
+
+	//cv::imwrite("groundtruth.png", grounthmat);
+
+
+
+	//MixShowResult(grounthmat1, grounthmat2);
 
 	//model->forward_kinematic();
 	//model->compute_mesh();
@@ -296,8 +360,8 @@ void main(int argc, char** argv){
 
 
 	//用于opengl显示
-	_data.init(model->vertices_.rows(),model->faces_.rows());
-	_data.set(model->vertices_update_,model->faces_);
+	_data.init(model->vertices_.rows(), model->faces_.rows());
+	_data.set(model->vertices_update_, model->faces_);
 	_data.set_color(model->weight_);
 	_data.set_skeleton(model);
 	//model->compute_mesh();
@@ -339,40 +403,42 @@ void main(int argc, char** argv){
 
 
 
-  //glut简单教程，以下的函数都有提到：http://www.cnblogs.com/yangxi/archive/2011/09/16/2178479.html
-  glutInit(&argc, argv);
- 
-  glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
-  glutInitWindowSize(800, 600);
-  glutInitWindowPosition(100, 100);
-  glutCreateWindow("Interactron");
- 
-  // register glut call backs
-  glutKeyboardFunc(keyboardDown);
-  glutKeyboardUpFunc(keyboardUp);
-  glutSpecialFunc(keyboardSpecialDown);
-  glutSpecialUpFunc(keyboardSpecialUp);
-  glutMouseFunc(mouseClick);
-  glutMotionFunc(mouseMotion);
-  glutReshapeFunc(reshape);  //当使用鼠标改变opengl显示窗口时，被调用的函数，保证不变形
-  glutDisplayFunc(draw);  
-  //glutIdleFunc(idle);
-  glutIgnoreKeyRepeat(true); // ignore keys held down
- 
-  // create a sub menu 
-  int subMenu = glutCreateMenu(menu);
-  glutAddMenuEntry("Do nothing", 0);
-  glutAddMenuEntry("Really Quit", 'q');
- 
-  // create main "right click" menu
-  glutCreateMenu(menu);
-  glutAddSubMenu("Sub Menu", subMenu);
-  glutAddMenuEntry("Quit", 'q');
-  glutAttachMenu(GLUT_RIGHT_BUTTON);
- 
-  initGL(800, 600);
+	//glut简单教程，以下的函数都有提到：http://www.cnblogs.com/yangxi/archive/2011/09/16/2178479.html
+	glutInit(&argc, argv);
 
-  glutMainLoop();
+	glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
+	glutInitWindowSize(800, 600);
+	glutInitWindowPosition(100, 100);
+	glutCreateWindow("Interactron");
+
+	// register glut call backs
+	glutKeyboardFunc(keyboardDown);
+	glutKeyboardUpFunc(keyboardUp);
+	glutSpecialFunc(keyboardSpecialDown);
+	glutSpecialUpFunc(keyboardSpecialUp);
+	glutMouseFunc(mouseClick);
+	glutMotionFunc(mouseMotion);
+	glutReshapeFunc(reshape);  //当使用鼠标改变opengl显示窗口时，被调用的函数，保证不变形
+	glutDisplayFunc(draw);
+	//glutIdleFunc(idle);
+	glutIgnoreKeyRepeat(true); // ignore keys held down
+
+							   // create a sub menu 
+	int subMenu = glutCreateMenu(menu);
+	glutAddMenuEntry("Do nothing", 0);
+	glutAddMenuEntry("Really Quit", 'q');
+
+	// create main "right click" menu
+	glutCreateMenu(menu);
+	glutAddSubMenu("Sub Menu", subMenu);
+	glutAddMenuEntry("Quit", 'q');
+	glutAttachMenu(GLUT_RIGHT_BUTTON);
+
+	initGL(800, 600);
+	glutMainLoop();
+
+
+
 
 
 
@@ -381,6 +447,7 @@ void main(int argc, char** argv){
 	//model->save_trans("trans.txt");
 	//model->save_local("local.txt");
 	//model->save_global("global.txt");
+	system("PAUSE");
 }
 
 
@@ -394,19 +461,19 @@ float Compute_area(cv::Mat input)
 		}
 	}
 
-	return HandPixelCount / (input.cols*input.rows);
+	return ((float)HandPixelCount)/(input.rows*input.cols);
 }
 
 float Compute_targetFunction(float area1, cv::Mat input)
 {
 	float area2 = Compute_area(input);
-	return pow((area1 - area2), 2);
+	return abs(area1 - area2);
 }
 
 void MixShowResult(cv::Mat input1, cv::Mat input2)
 {
-	int height = input1.rows;
-	int width = input1.cols;
+	int height = input2.rows;
+	int width = input2.cols;
 	cv::Mat colored_input1 = cv::Mat::zeros(height, width, CV_8UC3);
 	cv::Mat colored_input2 = cv::Mat::zeros(height, width, CV_8UC3);
 	cv::Mat dst;

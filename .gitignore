@@ -52,3 +52,10 @@ Hand/Release/Config.obj
 Release/Hand.iobj
 Hand.VC.db
 *.obj
+Hand.VC.db
+Hand/Release/BVH.obj
+*.obj
+*.log
+Release/Hand.iobj
+Release/Hand.ipdb
+Release/Hand.pdb
