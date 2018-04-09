@@ -265,13 +265,23 @@ void main(int argc, char** argv){
 	model->set_global_position(pose);
 	model->set_global_position_center(pose);
 
+	//cv::Mat img = cv::imread("groundtruth.png", CV_LOAD_IMAGE_UNCHANGED);  //这里采用CV_LOAD_IMAGE_UNCHANGED这个模式才可以真确的读入，不然读入都是不正确的，可能和存储的深度值是16位有关系。
+	//cv::Mat show_depth = cv::Mat::zeros(240, 320, CV_8UC1);
+	//for (int i = 0; i < img.rows; i++)
+	//{
+	//	for (int j = 0; j < img.cols; j++) {
+	//		show_depth.at<uchar>(i, j) = img.at<ushort>(i, j) % 255;
+	//	}
+	//}
+	//cv::imshow("kkk", show_depth);
+ //   cv::waitKey(100);
 
 	model->Load_groundtruth_pose("groundtruth.txt", model);
 	groundtruthmat = generate_depthMap(model->given_pose, model->given_scale, model, projection);
 	float groundarea = Compute_area(groundtruthmat);
 
 	srand(time(NULL));
-	model->given_scale = float(5 * rand() / float(RAND_MAX + 1));
+	model->given_scale = float(10 * rand() / float(RAND_MAX + 1));
 
 	float difference = 0;
 	do

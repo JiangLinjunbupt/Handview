@@ -59,3 +59,4 @@ Hand/Release/BVH.obj
 Release/Hand.iobj
 Release/Hand.ipdb
 Release/Hand.pdb
+*.log
