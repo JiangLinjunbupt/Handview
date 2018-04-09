@@ -761,7 +761,7 @@ void Model::compute_mesh(){
 		joint = bvh_.GetJoint(i);
 		Eigen::MatrixXd y = weight_.block(0,i,num_vertices_,1);// 在所有顶点 对于 该关节点的weight
 		Eigen::MatrixXd y0 = y.replicate(1,4);    //分别是行重复1遍，列重复4遍，结果为（num_vertices_，4）这么大小的矩阵
-		Eigen::MatrixXd z = joint->scale * joint->global * joint->local_inverse * x;
+		Eigen::MatrixXd z = joint->global * joint->scale*joint->local_inverse * x;                 //joint->scale 严格讲应该写成缩放矩阵的形式——————————
 		t = t + z.cwiseProduct(y0.transpose());
 	}
 	vertices_update_ = t.transpose();

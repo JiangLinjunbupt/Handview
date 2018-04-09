@@ -60,3 +60,8 @@ Release/Hand.iobj
 Release/Hand.ipdb
 Release/Hand.pdb
 *.log
+*.obj
+*.log
+*.iobj
+*.ipdb
+*.pdb
