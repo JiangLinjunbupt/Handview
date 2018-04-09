@@ -17,8 +17,6 @@ public:
 	int number_frame;
 
 
-
-
 };
 
 Configuration* Global();

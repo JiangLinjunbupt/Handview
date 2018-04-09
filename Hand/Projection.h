@@ -433,6 +433,117 @@ public:
 	}
 
 
+	void project_3d_to_2d_(Model* model, cv::Mat outputmat) {
+		Eigen::MatrixXd vertice = model->vertices_update_;
+		int num_vertice = model->vertices_update_.rows();
+		vertice2d_ = Eigen::MatrixXd::Zero(num_vertice, 3);
+		double x2d, y2d, depth;
+
+		depth_.setTo(0);
+		part_.setTo(0);
+		
+		for (int i = 0; i < model->vertices_update_.rows(); i++) {
+			projection(model->vertices_update_(i, 0),
+				model->vertices_update_(i, 1), model->vertices_update_(i, 2),
+				x2d, y2d, depth);
+			vertice2d_(i, 0) = x2d;
+			vertice2d_(i, 1) = y2d;
+			vertice2d_(i, 2) = depth;
+		}
+		//cout<<vertice2d_<<endl;
+		choose_point(model);
+		double x0 = 0, y0 = 0, x1 = 0, y1 = 0, x2 = 0, y2 = 0;
+		double alpha0 = 0, alpha1 = 0;
+		double depth0 = 0, depth1 = 0, depth2 = 0;
+		double d0 = 0, d1 = 0, d2 = 0;
+
+		for (int i = 0; i < pixels_.size(); i++) {
+			int f0 = model->faces_(i, 0);
+			int f1 = model->faces_(i, 1);
+			int f2 = model->faces_(i, 2);
+			x0 = vertice2d_(f1, 0) - vertice2d_(f0, 0);
+			y0 = vertice2d_(f1, 1) - vertice2d_(f0, 1);
+			x1 = vertice2d_(f2, 0) - vertice2d_(f0, 0);
+			y1 = vertice2d_(f2, 1) - vertice2d_(f0, 1);
+			depth0 = vertice2d_(f0, 2);
+			depth1 = vertice2d_(f1, 2);
+			depth2 = vertice2d_(f2, 2);
+			for (int j = 0; j < pixels_[i].size(); j++) {          //这个循环针对choose_point()这个函数提取的，每个三角面内的，像素点进行的处理
+				x2 = pixels_[i][j].x - vertice2d_(f0, 0);
+				y2 = pixels_[i][j].y - vertice2d_(f0, 1);
+				d0 = sqrt((x2*x2) + y2*y2);
+				double fx1 = pixels_[i][j].x - vertice2d_(f1, 0);
+				double fy1 = pixels_[i][j].y - vertice2d_(f1, 1);
+				d1 = sqrt((fx1*fx1) + fy1*fy1);
+				double fx2 = pixels_[i][j].x - vertice2d_(f2, 0);
+				double fy2 = pixels_[i][j].y - vertice2d_(f2, 1);
+				d2 = sqrt((fx2*fx2) + fy2*fy2);
+				int f = 0;
+				if (d0 <= d1&&d0 <= d2) {
+					f = f0;
+				}
+				if (d1 <= d0&&d1 <= d2) {
+					f = f1;
+				}
+				if (d2 <= d0&&d2 <= d1) {
+					f = f2;           //也就是说f是距离该点最近的顶点
+				}
+
+				if (x1*y0 - x0*y1 != 0) {
+					alpha1 = (x2*y0 - y2*x0) / (x1*y0 - x0*y1);
+					alpha0 = (x2*y1 - x1*y2) / (x0*y1 - x1*y0);
+				}
+				else {
+					alpha1 = 0;
+					if (y0 != 0) {
+						alpha0 = (y2) / (y0);
+					}
+					else { alpha0 = (x2) / (x0); }
+				}
+
+
+				if (pixels_[i][j].x >= 0 && pixels_[i][j].x< depth_.cols
+					&& pixels_[i][j].y >= 0 && pixels_[i][j].y < depth_.rows) {
+					depth = depth0 + alpha0*(depth1 - depth0) + alpha1*(depth2 - depth0);
+					ushort v = depth_.at<ushort>(pixels_[i][j].y, pixels_[i][j].x);
+					if (v != 0) {
+						depth_.at<ushort>(pixels_[i][j].y, pixels_[i][j].x) = min(v, (ushort)depth);
+						if (v>(ushort) depth) {
+							part_.at<uchar>(pixels_[i][j].y, pixels_[i][j].x) = (uchar)(map_label[coloridx_(f, 0)]);
+						}
+					}
+					else {
+						depth_.at<ushort>(pixels_[i][j].y, pixels_[i][j].x) = (ushort)depth;
+						part_.at<uchar>(pixels_[i][j].y, pixels_[i][j].x) = (uchar)(map_label[coloridx_(f, 0)]);
+					}
+				}
+			}
+		}
+
+		remove_arm(depth_, part_);
+		cv::Mat save_depth;
+		cv::medianBlur(depth_, save_depth, 5);
+
+
+		// if depth value is larger than 65536, it is error.
+		double minPixelValue, maxPixelValue;
+		cv::minMaxIdx(save_depth, &minPixelValue, &maxPixelValue);
+		if (maxPixelValue >= 5000) {
+			return;
+		}
+
+		cv::Mat show_depth = cv::Mat::zeros(240, 320, CV_8UC1);
+		for (int i = 0; i < show_depth.rows; i++)
+		{
+			for (int j = 0; j < show_depth.cols; j++) {
+				show_depth.at<uchar>(i, j) = save_depth.at<ushort>(i, j) % 255;
+			}
+		}
+		cv::imshow("depth", show_depth);
+
+		save_depth.copyTo(outputmat);
+	}
+
 private:
 	cv::Mat depth_;
 	cv::Mat orient_;

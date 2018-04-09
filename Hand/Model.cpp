@@ -6,6 +6,7 @@
 
 #include "util.h"
 #include <Eigen/LU>
+#include<time.h>
 Model::Model(){
 
 
@@ -20,6 +21,10 @@ Model::~Model(){
 
 }
 
+template <typename T> T cRandom(int min, int max)
+{
+	return (min + static_cast<T>(max * rand() / static_cast<T>(RAND_MAX + 1)));
+}
 
 void Model::set_dof(){
 	BVH::Joint* joint = bvh_.GetJoint(0);
@@ -544,9 +549,10 @@ void Model::compute_global(){
 
 	   if (i == 2)
 	   {
-		   Eigen::MatrixXd longer = Eigen::MatrixXd::Identity(4, 4);
+		  /* Eigen::MatrixXd longer = Eigen::MatrixXd::Identity(4, 4);
 		   longer(0, 3) = 100;
-		   joint->transR = joint->trans*longer*joint->rotation;
+		   joint->transR = joint->trans*longer*joint->rotation;*/
+		   joint->transR = joint->trans*joint->rotation;
 	   }
 	   else
 	   {
@@ -824,4 +830,68 @@ void Model::save_global(char* file){
 		f << bvh_.GetJoint(i)->global<<endl;
 	}
 	f.close();
+}
+
+void Model::Random_given_poseAndscale(Model* model)
+{
+	srand(time(NULL));
+	Pose upper(0, 0, 0);
+	Pose lower(0, 0, 0);
+	model->given_scale = float(3 * rand() / float(RAND_MAX + 1));
+	int t = 0;
+	for (int i = 0; i < 23; i++)
+	{
+		upper = model->get_upper_of_angle(i);
+		lower = model->get_lower_of_angle(i);
+		if (model->get_dof(i)[0] == true) {
+			t = upper.x - lower.x + 1;
+			model->given_pose[i].x = (rand() % t) + lower.x;
+		}
+		if (model->get_dof(i)[1] == true) {
+			t = upper.y - lower.y + 1;
+			model->given_pose[i].y = (rand() % t) + lower.y;
+		}
+
+		if (model->get_dof(i)[2] == true) {
+			t = upper.z - lower.z + 1;
+			model->given_pose[i].z = (rand() % t) + lower.z;
+		}
+		model->set_one_rotation(model->given_pose[i], i);
+		model->set_joint_scale(model->given_scale, i);
+	}
+
+}
+
+void Model::Load_groundtruth_pose(char* filename,Model* model)
+{
+	fstream f;
+	f.open(filename, ios::in);
+	f >> given_scale;
+	for (int i = 0; i < 23; i++) {
+		f >> given_pose[i].x >> given_pose[i].y >> given_pose[i].z;
+	}
+
+
+	f.close();
+	for (int i = 0; i < 23; i++) {
+		model->set_one_rotation(model->given_pose[i], i);
+		model->set_joint_scale(model->given_scale, i);
+	}
+}
+
+void Model::Save_given_params(char* filename)
+{
+	ofstream f;
+	f.open(filename, ios::out);
+	f << given_scale << endl;
+	for (int i = 0; i < 23; i++) {
+		f << given_pose[i].x << " " << given_pose[i].y << " " << given_pose[i].z << endl;
+	}
+	f.close();
+}
+
+void Model::set_joint_scale(float scale,int index)
+{
+	BVH::Joint* joint = bvh_.GetJoint(index);
+	joint->scale = scale;
 }
