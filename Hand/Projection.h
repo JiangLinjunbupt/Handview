@@ -507,12 +507,14 @@ public:
 					depth = depth0 + alpha0*(depth1 - depth0) + alpha1*(depth2 - depth0);
 					ushort v = depth_.at<ushort>(pixels_[i][j].y, pixels_[i][j].x);
 					if (v != 0) {
+						ushort k = (ushort)depth;
 						depth_.at<ushort>(pixels_[i][j].y, pixels_[i][j].x) = min(v, (ushort)depth);
 						if (v>(ushort) depth) {
 							part_.at<uchar>(pixels_[i][j].y, pixels_[i][j].x) = (uchar)(map_label[coloridx_(f, 0)]);
 						}
 					}
 					else {
+						ushort k = (ushort)depth;
 						depth_.at<ushort>(pixels_[i][j].y, pixels_[i][j].x) = (ushort)depth;
 						part_.at<uchar>(pixels_[i][j].y, pixels_[i][j].x) = (uchar)(map_label[coloridx_(f, 0)]);
 					}

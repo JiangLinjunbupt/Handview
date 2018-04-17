@@ -13,6 +13,13 @@ Model::Model(){
 }
 
 Model::Model(char* file){
+	for (int i = 0; i < 23; i++)
+	{
+		given_pose[i].x = 0;
+		given_pose[i].y = 0;
+		given_pose[i].z = 0;
+	}
+	given_scale = 1;
 	bvh_.Load(file);
 }
 
@@ -834,10 +841,10 @@ void Model::save_global(char* file){
 
 void Model::Random_given_poseAndscale(Model* model)
 {
-	srand(time(NULL));
+	srand((unsigned)time(NULL));
 	Pose upper(0, 0, 0);
 	Pose lower(0, 0, 0);
-	model->given_scale = float(3 * rand() / float(RAND_MAX + 1));
+	model->given_scale = float(2 * rand() / float(RAND_MAX + 1));
 	int t = 0;
 	for (int i = 0; i < 23; i++)
 	{
@@ -847,10 +854,22 @@ void Model::Random_given_poseAndscale(Model* model)
 			t = upper.x - lower.x + 1;
 			model->given_pose[i].x = (rand() % t) + lower.x;
 		}
+	}
+
+	for (int i = 0; i < 23; i++)
+	{
+		upper = model->get_upper_of_angle(i);
+		lower = model->get_lower_of_angle(i);
 		if (model->get_dof(i)[1] == true) {
 			t = upper.y - lower.y + 1;
 			model->given_pose[i].y = (rand() % t) + lower.y;
 		}
+	}
+
+	for (int i = 0; i < 23; i++)
+	{
+		upper = model->get_upper_of_angle(i);
+		lower = model->get_lower_of_angle(i);
 
 		if (model->get_dof(i)[2] == true) {
 			t = upper.z - lower.z + 1;
@@ -859,6 +878,8 @@ void Model::Random_given_poseAndscale(Model* model)
 		model->set_one_rotation(model->given_pose[i], i);
 		model->set_joint_scale(model->given_scale, i);
 	}
+
+
 
 }
 

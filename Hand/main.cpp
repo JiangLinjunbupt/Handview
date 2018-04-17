@@ -17,6 +17,56 @@ msra msr;
 
 #include "Projection.h"
 
+struct CloudPoint {
+	//记录思路，如果我们能知道每个点云是由深度图中代表哪个手部部分的像素点得到的，那么我们可以知道这个点云大致对应的手指部分，在后续计算与手摸之间的距离的时候，可以加以利用
+	float *cloudpoint;
+	int num_cloudpoint;
+
+	CloudPoint() :cloudpoint(nullptr) {};
+	~CloudPoint() {
+		if (cloudpoint) delete[] cloudpoint;
+	}
+
+	void init(cv::Mat depthmat)
+	{
+		int Num_NotZeroPixel = 0;
+		for (int i = 0; i < depthmat.rows; i++)
+		{
+			for (int j = 0; j < depthmat.cols; j++)
+			{
+				if (depthmat.at<ushort>(i, j) != 0)
+				{
+					Num_NotZeroPixel++;
+				}
+			}
+		}
+
+		this->num_cloudpoint = Num_NotZeroPixel;
+		this->cloudpoint = new float[num_cloudpoint * 3];
+	}
+
+	void DepthMatToCloudPoint(cv::Mat depthmat, double focal, float centerx, float centery)
+	{
+		int k = 0;
+		for (int i = 0; i < depthmat.rows; i++)
+		{
+			for (int j = 0; j < depthmat.cols; j++)
+			{
+				if (depthmat.at<ushort>(i, j) != 0)
+				{
+					this->cloudpoint[k] = (j -centerx) * (-depthmat.at<ushort>(i, j)) / focal;
+					this->cloudpoint[k + 1] = -(i - centery) * (-depthmat.at<ushort>(i, j)) / focal;
+					this->cloudpoint[k + 2] = - depthmat.at<ushort>(i, j);
+					//cout << "the " << k << " point is : x  " << this->cloudpoint[k] << "  y: " << this->cloudpoint[k + 1] << " z: " << this->cloudpoint[k + 2] << endl;
+					k = k+3;
+				}
+			}
+		}
+	}
+
+
+};
+
 float Compute_area(cv::Mat input);
 float Compute_targetFunction(float area1, cv::Mat input);
 void MixShowResult(cv::Mat input1, cv::Mat input2);
@@ -26,6 +76,7 @@ Config config;
 VisData _data;
 Control control;
 Sample sample(30.0);
+CloudPoint _cloudpoint;
 Projection *projection = new Projection(240, 320, 23, 28);
 cv::Mat groundtruthmat;
 const float h = 0.05;
@@ -48,7 +99,7 @@ void keyboardDown(unsigned char key, int x, int y) {
   switch(key) {
   case 'q':
 	  config.show_mesh = true;
-	  config.show_point = false;
+	  config.show_point = true;
 	  config.show_skeleton = false;
 	  break;
   case 'w':
@@ -139,32 +190,32 @@ void draw() {
 
   logo();
   /* render the scene here */
-  //glColor3d(1.0,1.0,1.0);
+  // glColor3d(1.0,1.0,1.0);
   if(config.show_point){
 	  glPointSize(2);
 	  glBegin(GL_POINTS);
       glColor3d(1.0,0.0,0.0);
 	  for(int i = 0; i < model->vertices_update_.rows(); i ++ ){		  
 		  glVertex3d(model->vertices_update_(i,0),model->vertices_update_(i,1),model->vertices_update_(i,2));
-		  //cout<< model->vertices_(i,0)<< " " << model->vertices_(i,1) <<" "<< model->vertices_(i,2)<<endl;
+		  //cout<< model->vertices_update_(i,0)<< " " << model->vertices_update_(i,1) <<" "<< model->vertices_update_(i,2)<<endl;
 	  }
 	  glEnd();
   }
 
-  if(config.show_mesh){
-	  if(_data.indices == nullptr) return;
-	  if(_data.vertices == nullptr ) return;
-	  glColor3d(0.0,0.0,1.0);
-      glEnableClientState(GL_VERTEX_ARRAY);
-      glVertexPointer(3, GL_FLOAT, 0, _data.vertices);
+  if (config.show_mesh) {
+	  if (_data.indices == nullptr) return;
+	  if (_data.vertices == nullptr) return;
+	  glColor3d(0.0, 0.0, 1.0);
+	  glEnableClientState(GL_VERTEX_ARRAY);
+	  glVertexPointer(3, GL_FLOAT, 0, _data.vertices);
 	  glEnableClientState(GL_COLOR_ARRAY);
 	  glColorPointer(3, GL_FLOAT, 0, _data.colors);
-//glDrawElements(GL_TRIANGLE_STRIP, 12, GL_UNSIGNED_BYTE, indices);
-	  glDrawElements(GL_TRIANGLES, 3*_data.num_face, GL_UNSIGNED_INT, _data.indices);
+	  //glDrawElements(GL_TRIANGLE_STRIP, 12, GL_UNSIGNED_BYTE, indices);
+	  glDrawElements(GL_TRIANGLES, 3 * _data.num_face, GL_UNSIGNED_INT, _data.indices);
 
-// deactivate vertex arrays after drawing
-      glDisableClientState(GL_VERTEX_ARRAY);
-  
+	  // deactivate vertex arrays after drawing
+	  glDisableClientState(GL_VERTEX_ARRAY);
+
   }
   //glEnable(GL_LIGHTING);
   if(config.show_skeleton){
@@ -192,6 +243,36 @@ void draw() {
 	  }
   }
 
+  glPointSize(5);
+  glBegin(GL_POINTS);
+  glColor3d(1.0, 0.0, 0.0);
+  for (int i = 0; i < _cloudpoint.num_cloudpoint*3; i = i+3)
+  {
+	  glVertex3d(_cloudpoint.cloudpoint[i], _cloudpoint.cloudpoint[i+1], _cloudpoint.cloudpoint[i+2]);
+  }
+  glEnd();
+
+
+  glLineWidth(5);
+  glColor3f(1.0, 0.0, 0);
+  glBegin(GL_LINES);
+  glVertex3f(0, 0,0);
+  glVertex3f(100, 0, 0);
+  glEnd();
+
+  glLineWidth(5);
+  glColor3f(0.0, 1.0, 0);
+  glBegin(GL_LINES);
+  glVertex3f(0, 0, 0);
+  glVertex3f(0,100, 0);
+  glEnd();
+
+  glLineWidth(5);
+  glColor3f(0.0, 0.0, 1.0);
+  glBegin(GL_LINES);
+  glVertex3f(0, 0, 0);
+  glVertex3f(0, 0, 100);
+  glEnd();
 
   glFlush();
   glutSwapBuffers();
@@ -261,7 +342,7 @@ void main(int argc, char** argv){
 	Configuration* pconfig = Global();
 	pconfig->LoadConfiguration("configuration.txt");
 	 
-	pose.x = 0; pose.y = 0; pose.z = -800;   //这里z负方向上越大，深度图中的手看起来越小
+	pose.x = 0; pose.y = 0; pose.z = -400;   //这里z负方向上越大，深度图中的手看起来越小
 	model->set_global_position(pose);
 	model->set_global_position_center(pose);
 
@@ -278,88 +359,90 @@ void main(int argc, char** argv){
 
 	model->Load_groundtruth_pose("groundtruth.txt", model);
 	groundtruthmat = generate_depthMap(model->given_pose, model->given_scale, model, projection);
-	float groundarea = Compute_area(groundtruthmat);
 
-	srand(time(NULL));
-	model->given_scale = float(10 * rand() / float(RAND_MAX + 1));
+	_cloudpoint.init(groundtruthmat);
+	_cloudpoint.DepthMatToCloudPoint(groundtruthmat, 241.3, 160, 120);
+	cout << _cloudpoint.num_cloudpoint << endl;
 
-	float difference = 0;
-	do
-	{
-		float gradient = 0;
-		for (int i = 0; i < 23; i++)
-		{
-			model->set_joint_scale(model->given_scale + h, i);
-		}
+	//float groundarea = Compute_area(groundtruthmat);
 
-		cv::Mat generatedmat1 = generate_depthMap(model->given_pose, model->given_scale, model, projection);
+	//srand(time(NULL));
+	//model->given_scale = float(10 * rand() / float(RAND_MAX + 1));
 
+	//float difference = 0;
+	//do
+	//{
+	//	float gradient = 0;
+	//	for (int i = 0; i < 23; i++)
+	//	{
+	//		model->set_joint_scale(model->given_scale + h, i);
+	//	}
 
-		float gradient1 = Compute_targetFunction(groundarea, generatedmat1);
-
-
-		for (int i = 0; i < 23; i++)
-		{
-			if (model->given_scale > h)
-			{
-				model->set_joint_scale(model->given_scale - h, i);
-			}
-			else
-			{
-				model->set_joint_scale(model->given_scale, i);
-			}
-		}
-
-		cv::Mat generatedmat2 = generate_depthMap(model->given_pose, model->given_scale, model, projection);
-
-		float gradient2 = Compute_targetFunction(groundarea, generatedmat2);
-		gradient = gradient1- gradient2;
-		cout << gradient1 << "  ";
-		gradient = gradient / (2 * h);
-		cout << gradient2 << "  " << gradient << "  ";
-		if (gradient != 0)
-		{
-			//gradient = gradient / abs(gradient);
-			model->given_scale = model->given_scale - step_length*gradient;
+	//	cv::Mat generatedmat1 = generate_depthMap(model->given_pose, model->given_scale, model, projection);
 
 
-			for (int i = 0; i < 23; i++)
-			{
-				model->set_joint_scale(model->given_scale, i);
-			}
-
-			cv::Mat generatedmat = generate_depthMap(model->given_pose, model->given_scale, model, projection);
-
-			difference = Compute_targetFunction(groundarea, generatedmat);
-			cout << difference << "  " << model->given_scale << endl;
-			MixShowResult(groundtruthmat, generatedmat);
-			cv::waitKey(50);
-		}
-		else
-		{
-			cout << "gradient is 0"<<"  ";
-			cv::Mat generatedmat = generate_depthMap(model->given_pose, model->given_scale, model, projection);
-
-			difference = Compute_targetFunction(groundarea, generatedmat);
-			cout << difference << "  " << model->given_scale << endl;
-			MixShowResult(groundtruthmat, generatedmat);
-			cv::waitKey(50);
-		}
-		
-	} while (difference >0.001);
-
-	//model->Random_given_poseAndscale(model);
-	//
-	//model->Save_given_params("groundtruth.txt");
-
-	//
-	//cv::Mat grounthmat = generate_depthMap(model->given_pose, model->given_scale, model, projection);
-
-	//cv::imwrite("groundtruth.png", grounthmat);
+	//	float gradient1 = Compute_targetFunction(groundarea, generatedmat1);
 
 
+	//	for (int i = 0; i < 23; i++)
+	//	{
+	//		if (model->given_scale > h)
+	//		{
+	//			model->set_joint_scale(model->given_scale - h, i);
+	//		}
+	//		else
+	//		{
+	//			model->set_joint_scale(model->given_scale, i);
+	//		}
+	//	}
 
-	//MixShowResult(grounthmat1, grounthmat2);
+	//	cv::Mat generatedmat2 = generate_depthMap(model->given_pose, model->given_scale, model, projection);
+
+	//	float gradient2 = Compute_targetFunction(groundarea, generatedmat2);
+	//	gradient = gradient1- gradient2;
+	//	cout << gradient1 << "  ";
+	//	gradient = gradient / (2 * h);
+	//	cout << gradient2 << "  " << gradient << "  ";
+	//	if (gradient != 0)
+	//	{
+	//		//gradient = gradient / abs(gradient);
+	//		model->given_scale = model->given_scale - step_length*gradient;
+
+
+	//		for (int i = 0; i < 23; i++)
+	//		{
+	//			model->set_joint_scale(model->given_scale, i);
+	//		}
+
+	//		cv::Mat generatedmat = generate_depthMap(model->given_pose, model->given_scale, model, projection);
+
+	//		difference = Compute_targetFunction(groundarea, generatedmat);
+	//		cout << difference << "  " << model->given_scale << endl;
+	//		MixShowResult(groundtruthmat, generatedmat);
+	//		cv::waitKey(50);
+	//	}
+	//	else
+	//	{
+	//		cout << "gradient is 0"<<"  ";
+	//		cv::Mat generatedmat = generate_depthMap(model->given_pose, model->given_scale, model, projection);
+
+	//		difference = Compute_targetFunction(groundarea, generatedmat);
+	//		cout << difference << "  " << model->given_scale << endl;
+	//		MixShowResult(groundtruthmat, generatedmat);
+	//		cv::waitKey(50);
+	//	}
+	//	
+	//} while (difference >0.001);
+
+
+	//生成真实值begin ，并且保存真实值为txt文件和png图片文件
+	/*model->Random_given_poseAndscale(model);
+	model->Save_given_params("groundtruth.txt");
+	cv::Mat grounthmat = generate_depthMap(model->given_pose, model->given_scale, model, projection);
+	cv::imwrite("groundtruth.png", grounthmat);*/
+	//生成真实值end
+
+
 
 	//model->forward_kinematic();
 	//model->compute_mesh();
@@ -547,3 +630,4 @@ cv::Mat generate_depthMap(Pose* pose, float scale, Model* model, Projection *pro
 	projection->project_3d_to_2d_(model,generated_mat);
 	return generated_mat;
 }
+
